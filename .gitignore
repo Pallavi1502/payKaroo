@@ -1,0 +1,18 @@
+# Maven
+target/
+*.class
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Env files
+.env
+application-local.yml
