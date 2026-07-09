@@ -15,4 +15,4 @@ out/
 
 # Env files
 .env
-application-local.yml
+application-local.yaml
