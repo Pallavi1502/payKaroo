@@ -7,13 +7,15 @@ public class AuthResponse {
     private String email;
     private String role;
     private String token;
+    private String refreshToken;
 
-    public AuthResponse(Long userId, String name, String email, String role, String token) {
+    public AuthResponse(Long userId, String name, String email, String role, String token, String refreshToken) {
         this.userId = userId;
         this.name = name;
         this.email = email;
         this.role = role;
         this.token = token;
+        this.refreshToken = refreshToken;
     }
 
     public Long getUserId() { return userId; }
@@ -21,4 +23,5 @@ public class AuthResponse {
     public String getEmail() { return email; }
     public String getRole() { return role; }
     public String getToken() { return token; }
+    public String getRefreshToken() { return refreshToken; }
 }

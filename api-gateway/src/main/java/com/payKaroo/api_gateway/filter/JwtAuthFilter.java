@@ -25,7 +25,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered{
     // Routes that don't require a token
     private final List<String> openApiEndpoints = List.of(
             "/api/auth/register",
-            "/api/auth/login"
+            "/api/auth/login",
+            "/api/auth/refresh"
     );
 
     @Override
