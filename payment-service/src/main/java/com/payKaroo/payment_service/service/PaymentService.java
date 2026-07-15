@@ -6,14 +6,19 @@ import com.payKaroo.payment_service.dto.CreateOrderResponse;
 import com.payKaroo.payment_service.dto.VerifyPaymentRequest;
 import com.payKaroo.payment_service.entity.Payment;
 import com.payKaroo.payment_service.entity.PaymentStatus;
+import com.payKaroo.payment_service.entity.RefundStatus;
 import com.payKaroo.payment_service.exception.PaymentNotFoundException;
 import com.payKaroo.payment_service.exception.PaymentVerificationException;
 import com.payKaroo.payment_service.repository.PaymentRepository;
+import com.payKaroo.payment_service.repository.RefundRepository;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
 import com.razorpay.RazorpayException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
@@ -28,13 +33,19 @@ public class PaymentService {
 
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
+    private final RefundRepository refundRepository;
 
     @Value("${razorpay.key-secret}")
     private String keySecret;
 
-    public PaymentService(RazorpayClient razorpayClient, PaymentRepository paymentRepository) {
+    @Value("${razorpay.webhook-secret}")
+    private String webhookSecret;
+
+    public PaymentService(RazorpayClient razorpayClient, PaymentRepository paymentRepository,
+                          RefundRepository refundRepository) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
+        this.refundRepository = refundRepository;
     }
 
     public CreateOrderResponse createOrder(CreateOrderRequest request) throws RazorpayException {
@@ -117,5 +128,101 @@ public class PaymentService {
         } catch (NoSuchAlgorithmException | InvalidKeyException e) {
             throw new PaymentVerificationException("Error verifying payment signature");
         }
+    }
+
+    public Page<Payment> getPaymentHistory(Long userId, PaymentStatus status, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        if (status != null) {
+            return paymentRepository.findByUserIdAndStatus(userId, status, pageable);
+        }
+        return paymentRepository.findByUserId(userId, pageable);
+    }
+
+    public Payment getPaymentById(Long paymentId) {
+        return paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new PaymentNotFoundException("No payment found with ID: " + paymentId));
+    }
+
+    public void processWebhook(String payload, String razorpaySignature){
+        boolean isValid = verifyWebhookSignature(payload, razorpaySignature);
+
+        if (!isValid) {
+            throw new PaymentVerificationException("Invalid webhook signature");
+        }
+
+        JSONObject event = new JSONObject(payload);
+        String eventType = event.getString("event");
+
+        switch (eventType) {
+            case "payment.captured" -> handlePaymentCaptured(event);
+            case "payment.failed" -> handlePaymentFailed(event);
+            case "refund.processed" -> handleRefundProcessed(event);
+            default -> {
+                // Unhandled event type - log and ignore
+            }
+        }
+    }
+
+    private boolean verifyWebhookSignature(String payload, String signature){
+        try{
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(
+                    webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKeySpec);
+            byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+
+            return hexString.toString().equals(signature);
+        }catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            throw new PaymentVerificationException("Error verifying webhook signature");
+        }
+    }
+
+    private void handlePaymentCaptured(JSONObject event) {
+        JSONObject paymentEntity = event.getJSONObject("payload")
+                .getJSONObject("payment")
+                .getJSONObject("entity");
+
+        String razorpayOrderId = paymentEntity.getString("order_id");
+        String razorpayPaymentId = paymentEntity.getString("id");
+
+        paymentRepository.findByOrderId(razorpayOrderId).ifPresent(payment -> {
+            payment.setPaymentId(razorpayPaymentId);
+            payment.setStatus(PaymentStatus.SUCCESS);
+            paymentRepository.save(payment);
+        });
+    }
+
+    private void handlePaymentFailed(JSONObject event) {
+        JSONObject paymentEntity = event.getJSONObject("payload")
+                .getJSONObject("payment")
+                .getJSONObject("entity");
+
+        String razorpayOrderId = paymentEntity.getString("order_id");
+
+        paymentRepository.findByOrderId(razorpayOrderId).ifPresent(payment -> {
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+        });
+    }
+
+    private void handleRefundProcessed(JSONObject event) {
+        JSONObject refundEntity = event.getJSONObject("payload")
+                .getJSONObject("refund")
+                .getJSONObject("entity");
+
+        String razorpayRefundId = refundEntity.getString("id");
+
+        refundRepository.findByRazorpayRefundId(razorpayRefundId).ifPresent(refund -> {
+            refund.setStatus(RefundStatus.REFUNDED);
+            refundRepository.save(refund);
+        });
     }
 }
