@@ -9,6 +9,9 @@ public class CreateOrderResponse {
     private String currency;
     private String status;
 
+    public CreateOrderResponse() {
+    }
+
     public CreateOrderResponse(String orderId, BigDecimal amount, String currency, String status) {
         this.orderId = orderId;
         this.amount = amount;
@@ -17,7 +20,14 @@ public class CreateOrderResponse {
     }
 
     public String getOrderId() { return orderId; }
+    public void setOrderId(String orderId) { this.orderId = orderId; }
+
     public BigDecimal getAmount() { return amount; }
+    public void setAmount(BigDecimal amount) { this.amount = amount; }
+
     public String getCurrency() { return currency; }
+    public void setCurrency(String currency) { this.currency = currency; }
+
     public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }
