@@ -7,8 +7,11 @@ import com.payKaroo.payment_service.dto.VerifyPaymentRequest;
 import com.payKaroo.payment_service.entity.Payment;
 import com.payKaroo.payment_service.entity.PaymentStatus;
 import com.payKaroo.payment_service.entity.RefundStatus;
+import com.payKaroo.payment_service.event.PaymentFailedEvent;
+import com.payKaroo.payment_service.event.PaymentSuccessEvent;
 import com.payKaroo.payment_service.exception.PaymentNotFoundException;
 import com.payKaroo.payment_service.exception.PaymentVerificationException;
+import com.payKaroo.payment_service.kafka.PaymentEventProducer;
 import com.payKaroo.payment_service.repository.PaymentRepository;
 import com.payKaroo.payment_service.repository.RefundRepository;
 import com.razorpay.Order;
@@ -34,6 +37,7 @@ public class PaymentService {
     private final RazorpayClient razorpayClient;
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
+    private final PaymentEventProducer eventProducer;
 
     @Value("${razorpay.key-secret}")
     private String keySecret;
@@ -42,10 +46,11 @@ public class PaymentService {
     private String webhookSecret;
 
     public PaymentService(RazorpayClient razorpayClient, PaymentRepository paymentRepository,
-                          RefundRepository refundRepository) {
+                          RefundRepository refundRepository, PaymentEventProducer eventProducer) {
         this.razorpayClient = razorpayClient;
         this.paymentRepository = paymentRepository;
         this.refundRepository = refundRepository;
+        this.eventProducer = eventProducer;
     }
 
     public CreateOrderResponse createOrder(CreateOrderRequest request) throws RazorpayException {
@@ -95,12 +100,20 @@ public class PaymentService {
         if (!isValidSignature) {
             payment.setStatus(PaymentStatus.FAILED);
             paymentRepository.save(payment);
+
+            eventProducer.publishPaymentFailed(new PaymentFailedEvent(
+                    payment.getUserId(), payment.getOrderId(), "Signature verification failed"));
+
             throw new PaymentVerificationException("Payment signature verification failed");
         }
 
         payment.setPaymentId(request.getRazorpayPaymentId());
         payment.setStatus(PaymentStatus.SUCCESS);
         paymentRepository.save(payment);
+
+        eventProducer.publishPaymentSuccess(new PaymentSuccessEvent(
+                payment.getUserId(), payment.getId(), payment.getOrderId(),
+                payment.getAmount(), payment.getCurrency()));
 
         return "Payment verified successfully";
     }

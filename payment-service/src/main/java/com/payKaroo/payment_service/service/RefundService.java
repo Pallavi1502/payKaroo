@@ -5,7 +5,9 @@ import com.payKaroo.payment_service.dto.RefundResponse;
 import com.payKaroo.payment_service.entity.Payment;
 import com.payKaroo.payment_service.entity.Refund;
 import com.payKaroo.payment_service.entity.RefundStatus;
+import com.payKaroo.payment_service.event.RefundInitiatedEvent;
 import com.payKaroo.payment_service.exception.PaymentNotFoundException;
+import com.payKaroo.payment_service.kafka.PaymentEventProducer;
 import com.payKaroo.payment_service.repository.PaymentRepository;
 import com.payKaroo.payment_service.repository.RefundRepository;
 import com.razorpay.RazorpayClient;
@@ -19,12 +21,14 @@ public class RefundService {
     private final RefundRepository refundRepository;
     private final PaymentRepository paymentRepository;
     private final RazorpayClient razorpayClient;
+    private final PaymentEventProducer eventProducer;
 
     public RefundService(RefundRepository refundRepository, PaymentRepository paymentRepository,
-                         RazorpayClient razorpayClient) {
+                         RazorpayClient razorpayClient, PaymentEventProducer eventProducer) {
         this.refundRepository = refundRepository;
         this.paymentRepository = paymentRepository;
         this.razorpayClient = razorpayClient;
+        this.eventProducer = eventProducer;
     }
 
 
@@ -57,6 +61,9 @@ public class RefundService {
         refund.setStatus(RefundStatus.REFUNDED);
 
         Refund savedRefund = refundRepository.save(refund);
+
+        eventProducer.publishRefundInitiated(new RefundInitiatedEvent(
+                payment.getUserId(), savedRefund.getId(), payment.getId(), savedRefund.getAmount()))
 
         return new RefundResponse(
                 savedRefund.getId(),
