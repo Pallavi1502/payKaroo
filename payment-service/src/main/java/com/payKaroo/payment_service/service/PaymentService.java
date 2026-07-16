@@ -102,7 +102,7 @@ public class PaymentService {
             paymentRepository.save(payment);
 
             eventProducer.publishPaymentFailed(new PaymentFailedEvent(
-                    payment.getUserId(), payment.getOrderId(), "Signature verification failed"));
+                    payment.getUserId(), "test@example.com",payment.getOrderId(), "Signature verification failed"));
 
             throw new PaymentVerificationException("Payment signature verification failed");
         }
@@ -112,7 +112,7 @@ public class PaymentService {
         paymentRepository.save(payment);
 
         eventProducer.publishPaymentSuccess(new PaymentSuccessEvent(
-                payment.getUserId(), payment.getId(), payment.getOrderId(),
+                payment.getUserId(), "test@example.com", payment.getId(), payment.getOrderId(),
                 payment.getAmount(), payment.getCurrency()));
 
         return "Payment verified successfully";

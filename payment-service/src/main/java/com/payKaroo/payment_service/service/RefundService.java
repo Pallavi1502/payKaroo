@@ -63,7 +63,7 @@ public class RefundService {
         Refund savedRefund = refundRepository.save(refund);
 
         eventProducer.publishRefundInitiated(new RefundInitiatedEvent(
-                payment.getUserId(), savedRefund.getId(), payment.getId(), savedRefund.getAmount()))
+                payment.getUserId(), "test@example.com", savedRefund.getId(), payment.getId(), savedRefund.getAmount()));
 
         return new RefundResponse(
                 savedRefund.getId(),
